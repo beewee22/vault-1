@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 import {
     Lock, Server, Key, ShieldCheck, ChevronRight,
     Search, Grid, Clock, Star, Settings, LogOut,
     Eye, Copy, MoreHorizontal, ExternalLink, RefreshCw,
-    Plus, X, Trash2, Check, Shield
+    Plus, X, Trash2, Check, Shield, EyeOff
 } from "lucide-react";
 
 // --- Components ---
@@ -187,13 +188,13 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap- object-right opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         {f.secret && (
                                             <button
                                                 onClick={() => toggleValue(f.key)}
                                                 className="p-2 hover:bg-white/10 rounded-lg text-mute hover:text-main transition-colors"
                                             >
-                                                <Eye className="w-4 h-4" />
+                                                {showValues[f.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                             </button>
                                         )}
                                         <button
@@ -216,7 +217,10 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                         <Clock className="w-4 h-4" />
                         <span>Connected to {url}</span>
                     </div>
-                    <button className="flex items-center gap-2 text-mute text-xs hover:text-main transition-colors">
+                    <button
+                        onClick={() => open(url)}
+                        className="flex items-center gap-2 text-mute text-xs hover:text-main transition-colors"
+                    >
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span>View in Vault UI</span>
                     </button>
@@ -322,9 +326,14 @@ function CreateSecretModal({ onClose, onSave, currentPath }: { onClose: () => vo
             if (curr.key) acc[curr.key] = curr.value;
             return acc;
         }, {} as any);
-        await onSave(name, data);
-        setIsSaving(false);
-        onClose();
+        try {
+            await onSave(name, data);
+            onClose();
+        } catch (error: any) {
+            alert("Failed to save: " + error.toString());
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -416,6 +425,24 @@ function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (na
     const [name, setName] = useState("");
     const [url, setUrl] = useState("http://0.0.0.0:8200");
     const [token, setToken] = useState("");
+    const [isValidating, setIsValidating] = useState(false);
+    const [error, setError] = useState("");
+
+    const handleSaveProfile = async () => {
+        if (!name || !url || !token) return;
+        setIsValidating(true);
+        setError("");
+
+        try {
+            await invoke("check_vault_connection", { url, token });
+            onSave(name, url, token);
+            onClose();
+        } catch (err: any) {
+            setError("Connection failed: " + err.toString());
+        } finally {
+            setIsValidating(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -425,6 +452,11 @@ function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (na
                     <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors text-mute hover:text-main"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="p-8 space-y-6">
+                    {error && (
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+                            {error}
+                        </div>
+                    )}
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-mute uppercase tracking-widest ml-1">Profile Name</label>
                         <input
@@ -454,16 +486,11 @@ function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (na
                         />
                     </div>
                     <button
-                        onClick={() => {
-                            if (name && url && token) {
-                                onSave(name, url, token);
-                                onClose();
-                            }
-                        }}
-                        disabled={!name || !url || !token}
-                        className="btn-premium w-full py-4 text-sm font-bold flex items-center justify-center gap-2 mt-4"
+                        onClick={handleSaveProfile}
+                        disabled={!name || !url || !token || isValidating}
+                        className="btn-premium w-full py-4 text-sm font-bold flex items-center justify-center gap-2 mt-2"
                     >
-                        <Plus className="w-4 h-4" /> Save Profile
+                        {isValidating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Plus className="w-4 h-4" /> Save Profile</>}
                     </button>
                 </div>
             </div>
@@ -582,10 +609,11 @@ function SettingsView({ profiles, activeId, onSelect, onAdd, onRemove, autoLock,
     );
 }
 
-function Dashboard({ url, token, activeTab, favorites, recentlyUsed, toggleFavorite, onItemView }: {
+function Dashboard({ url, token, activeTab, setActiveTab, favorites, recentlyUsed, toggleFavorite, onItemView }: {
     url: string;
     token: string;
     activeTab: string;
+    setActiveTab: (t: string) => void;
     favorites: any[];
     recentlyUsed: any[];
     toggleFavorite: (s: any) => void;
@@ -813,16 +841,34 @@ function Dashboard({ url, token, activeTab, favorites, recentlyUsed, toggleFavor
             });
             fetchSecrets();
         } catch (err: any) {
-            alert("Error saving: " + err.toString());
+            console.error("Error saving secret:", err);
+            throw err;
         }
     };
 
     const handleItemClick = (item: any) => {
+        // Clear search query when navigating
+        setSearchQuery("");
+
         if (item.type === 'POLICY') {
             navigateTo(currentPath, null, item.name);
         } else if (item.type === 'FOLDER' || item.type === 'MOUNT') {
-            const nextPath = item.path; // Already the full path
-            navigateTo(nextPath, null, null);
+            const nextPath = item.path;
+
+            // If we are in Favorites or Recent or Search, we should switch to "all" to see the folder contents
+            if (activeTab !== "all") {
+                setActiveTab("all");
+                // We need to set the path AFTER the tab change effect clears it?
+                // The tab change effect calls replaceState and resets currentPath.
+                // We need to override that.
+                // Actually, if we change activeTab, the effect runs and RESETS path.
+                // So we can't easily jump to a path in "all" tab from here without a small refactor or timeout.
+                // Best approach: allow the effect to run, but maybe pass a "targetPath" prop to Dashboard?
+                // Or simply:
+                setTimeout(() => navigateTo(nextPath, null, null), 50);
+            } else {
+                navigateTo(nextPath, null, null);
+            }
         } else {
             navigateTo(currentPath, item, null);
             onItemView(item);
@@ -1079,7 +1125,7 @@ function App() {
     const [navPointer, setNavPointer] = useState(-1);
     const [profiles, setProfiles] = useState<any[]>(() => {
         const saved = localStorage.getItem("vault_profiles");
-        return saved ? JSON.parse(saved) : [{ id: 'default', name: 'Default', url: 'http://0.0.0.0:8200', token: '' }];
+        return saved ? JSON.parse(saved) : [{ id: 'default', name: 'Default', url: 'https://vault.dev-mng-testbed.mng.musinsa.io', token: '' }];
     });
     const [activeProfileId, setActiveProfileId] = useState<string>(profiles[0].id);
 
@@ -1151,11 +1197,15 @@ function App() {
         setError("");
 
         try {
+            // Validate connection first
+            await invoke("check_vault_connection", { url: vaultUrl, token });
+
             await invoke("save_vault_token", { token });
             await new Promise(r => setTimeout(r, 800));
             setIsLoggedIn(true);
         } catch (err: any) {
-            setError(err.toString());
+            console.error("Login error:", err);
+            setError("Connection failed: " + err.toString());
         } finally {
             setIsLoggingIn(false);
         }
@@ -1210,6 +1260,7 @@ function App() {
                                 url={vaultUrl}
                                 token={token}
                                 activeTab={activeTab}
+                                setActiveTab={setActiveTab}
                                 favorites={favorites}
                                 recentlyUsed={recentlyUsed}
                                 toggleFavorite={toggleFavorite}
