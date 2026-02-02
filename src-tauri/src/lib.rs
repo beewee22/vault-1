@@ -22,6 +22,8 @@ async fn fetch_vault_secret(url: String, token: String, path: String) -> Result<
         .header("X-Vault-Token", token)
         .send()
         .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
         .map_err(|e| e.to_string())?;
 
     let body = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
@@ -36,6 +38,8 @@ async fn list_vault_secrets(url: String, token: String, path: String) -> Result<
         .header("X-Vault-Token", token)
         .send()
         .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
         .map_err(|e| e.to_string())?;
 
     let body = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
@@ -57,6 +61,8 @@ async fn save_vault_secret(url: String, token: String, path: String, data: serde
         .json(&body)
         .send()
         .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
         .map_err(|e| e.to_string())?;
 
     Ok(())
@@ -70,6 +76,8 @@ async fn list_vault_policies(url: String, token: String) -> Result<serde_json::V
         .header("X-Vault-Token", token)
         .send()
         .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
         .map_err(|e| e.to_string())?;
 
     let body = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
@@ -84,10 +92,38 @@ async fn read_vault_policy(url: String, token: String, name: String) -> Result<s
         .header("X-Vault-Token", token)
         .send()
         .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
         .map_err(|e| e.to_string())?;
 
     let body = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
     Ok(body)
+}
+
+#[tauri::command]
+async fn check_vault_connection(url: String, token: String) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let endpoint = format!("{}/v1/auth/token/lookup-self", url);
+    
+    log::info!("Checking Vault connection to: {}", endpoint);
+    
+    let response = client
+        .get(&endpoint)
+        .header("X-Vault-Token", &token)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+    
+    let status = response.status();
+    log::info!("Vault response status: {}", status);
+    
+    if !status.is_success() {
+        let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
+        log::error!("Vault error response: {}", error_body);
+        return Err(format!("Vault returned {}: {}", status, error_body));
+    }
+    
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -155,7 +191,8 @@ pub fn run() {
             list_vault_secrets,
             save_vault_secret,
             list_vault_policies,
-            read_vault_policy
+            read_vault_policy,
+            check_vault_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
