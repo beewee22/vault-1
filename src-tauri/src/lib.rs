@@ -164,7 +164,7 @@ async fn oidc_login(
         .map_err(|e| format!("Failed to bind to localhost: {}", e))?;
     
     let local_addr = listener.local_addr().map_err(|e| e.to_string())?;
-    let redirect_uri = format!("http://127.0.0.1:{}/oidc/callback", local_addr.port());
+    let redirect_uri = format!("http://localhost:{}/oidc/callback", local_addr.port());
     
     log::info!("Listening for callback on: {}", redirect_uri);
     
@@ -416,12 +416,12 @@ mod tests {
     fn test_oidc_auth_url_request_body() {
         let body = serde_json::json!({
             "role": "test-role",
-            "redirect_uri": "http://127.0.0.1:12345/oidc/callback",
+            "redirect_uri": "http://localhost:12345/oidc/callback",
             "client_nonce": "abcd1234efgh5678ijkl9012mnop3456"
         });
         
         assert_eq!(body["role"], "test-role");
-        assert_eq!(body["redirect_uri"], "http://127.0.0.1:12345/oidc/callback");
+        assert_eq!(body["redirect_uri"], "http://localhost:12345/oidc/callback");
         assert_eq!(body["client_nonce"], "abcd1234efgh5678ijkl9012mnop3456");
         assert!(body["client_nonce"].as_str().unwrap().len() == 32);
     }
