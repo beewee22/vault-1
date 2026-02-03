@@ -150,6 +150,7 @@ async fn oidc_login(
     mount_path: String,
     role: String,
 ) -> Result<(), String> {
+    let url = url.trim_end_matches('/').to_string();
     log::info!("Starting OIDC login for role: {} on mount: {}", role, mount_path);
     
     let nonce: String = rand::thread_rng()
@@ -183,9 +184,14 @@ async fn oidc_login(
         .json(&auth_url_body)
         .send()
         .await
-        .map_err(|e| format!("Failed to request auth URL: {}", e))?
-        .error_for_status()
-        .map_err(|e| format!("Vault auth URL request failed: {}", e))?;
+        .map_err(|e| format!("Failed to request auth URL: {}", e))?;
+
+    if !auth_response.status().is_success() {
+        let status = auth_response.status();
+        let error_body = auth_response.text().await.unwrap_or_else(|_| "Unable to read error".to_string());
+        log::error!("OIDC auth_url request failed ({}): {}", status, error_body);
+        return Err(format!("Vault auth_url request failed ({}): {}", status, error_body));
+    }
     
     let auth_data: serde_json::Value = auth_response
         .json()
@@ -197,7 +203,13 @@ async fn oidc_login(
         .ok_or("Missing auth_url in response")?
         .to_string();
     
-    log::info!("Opening browser for authentication");
+    log::info!("Opening browser for authentication: {}", auth_url);
+    
+    // Validate URL scheme - macOS open command interprets non-URL strings as file paths
+    if !auth_url.starts_with("http://") && !auth_url.starts_with("https://") {
+        log::error!("Invalid auth_url (no URL scheme): {}", auth_url);
+        return Err(format!("Invalid auth URL received from Vault: {}. Expected https:// URL.", auth_url));
+    }
     
     app.shell()
         .open(&auth_url, None)
@@ -224,9 +236,14 @@ async fn oidc_login(
         .get(&callback_endpoint)
         .send()
         .await
-        .map_err(|e| format!("Failed to exchange code for token: {}", e))?
-        .error_for_status()
-        .map_err(|e| format!("Token exchange failed: {}", e))?;
+        .map_err(|e| format!("Failed to exchange code for token: {}", e))?;
+
+    if !token_response.status().is_success() {
+        let status = token_response.status();
+        let error_body = token_response.text().await.unwrap_or_else(|_| "Unable to read error".to_string());
+        log::error!("OIDC token exchange failed ({}): {}", status, error_body);
+        return Err(format!("Token exchange failed ({}): {}", status, error_body));
+    }
     
     let token_data: serde_json::Value = token_response
         .json()
