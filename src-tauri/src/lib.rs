@@ -179,6 +179,8 @@ async fn oidc_login(
         "client_nonce": nonce
     });
     
+    log::info!("OIDC auth request body: role='{}', redirect_uri='{}'", role, redirect_uri);
+    
     let auth_response = client
         .post(&auth_url_endpoint)
         .json(&auth_url_body)
@@ -198,10 +200,22 @@ async fn oidc_login(
         .await
         .map_err(|e| format!("Failed to parse auth URL response: {}", e))?;
     
+    log::info!("OIDC auth_url response: {}", serde_json::to_string_pretty(&auth_data).unwrap_or_else(|_| "unparseable".to_string()));
+    
     let auth_url = auth_data["data"]["auth_url"]
         .as_str()
-        .ok_or("Missing auth_url in response")?
+        .ok_or_else(|| {
+            let msg = format!("Missing auth_url in response. Full response: {}", auth_data);
+            log::error!("{}", msg);
+            msg
+        })?
         .to_string();
+    
+    if auth_url.is_empty() {
+        let msg = format!("Vault returned empty auth_url. This usually means the redirect_uri is not in the OIDC role's allowed_redirect_uris. Full response: {}", auth_data);
+        log::error!("{}", msg);
+        return Err(msg);
+    }
     
     log::info!("Opening browser for authentication: {}", auth_url);
     
