@@ -7,6 +7,7 @@ import {
     Eye, Copy, MoreHorizontal, ExternalLink, RefreshCw,
     Plus, X, Trash2, Check, Shield, EyeOff
 } from "lucide-react";
+import { migrateProfiles } from "./types";
 
 // --- Components ---
 
@@ -1125,7 +1126,8 @@ function App() {
     const [navPointer, setNavPointer] = useState(-1);
     const [profiles, setProfiles] = useState<any[]>(() => {
         const saved = localStorage.getItem("vault_profiles");
-        return saved ? JSON.parse(saved) : [{ id: 'default', name: 'Default', url: 'https://vault.dev-mng-testbed.mng.musinsa.io', token: '' }];
+        const parsed = saved ? JSON.parse(saved) : [{ id: 'default', name: 'Default', url: 'https://vault.dev-mng-testbed.mng.musinsa.io', token: '' }];
+        return migrateProfiles(parsed);
     });
     const [activeProfileId, setActiveProfileId] = useState<string>(profiles[0].id);
 
@@ -1168,7 +1170,7 @@ function App() {
     };
 
     const saveProfile = (name: string, url: string, token: string) => {
-        const newProfile = { id: Date.now().toString(), name, url, token };
+        const newProfile = { id: Date.now().toString(), name, url, token, authMethod: "token" as const };
         setProfiles(prev => [...prev, newProfile]);
         setActiveProfileId(newProfile.id);
     };
