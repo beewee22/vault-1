@@ -1142,6 +1142,7 @@ function Dashboard({ url, token, activeTab, setActiveTab, favorites, recentlyUse
 function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [isLoginAddProfileOpen, setIsLoginAddProfileOpen] = useState(false);
     const [activeTab, setActiveTab] = useState("all");
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isLocked, setIsLocked] = useState(false);
@@ -1409,15 +1410,7 @@ function App() {
                                 <span>Vault Profile</span>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        const name = prompt("Profile Name?");
-                                        if (name) saveProfile({ 
-                                            name, 
-                                            url: vaultUrl, 
-                                            token, 
-                                            authMethod: "token" 
-                                        });
-                                    }}
+                                    onClick={() => setIsLoginAddProfileOpen(true)}
                                     className="text-[10px] text-brand hover:brightness-125 transition-all lowercase"
                                 >
                                     + Add New
@@ -1509,6 +1502,13 @@ function App() {
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span>Encrypted connection with end-to-end security</span>
                 </div>
+
+                {isLoginAddProfileOpen && (
+                    <AddProfileModal 
+                        onClose={() => setIsLoginAddProfileOpen(false)} 
+                        onSave={saveProfile} 
+                    />
+                )}
             </div>
         </div>
     );
