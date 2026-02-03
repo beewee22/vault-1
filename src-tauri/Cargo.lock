@@ -81,6 +81,7 @@ version = "0.1.0"
 dependencies = [
  "keyring",
  "log",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",
@@ -90,6 +91,7 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-shell",
  "tokio",
+ "url",
 ]
 
 [[package]]

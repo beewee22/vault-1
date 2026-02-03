@@ -1,5 +1,10 @@
 use keyring::Entry;
 use tauri::Manager;
+use rand::Rng;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
+use url::Url;
+use tauri_plugin_shell::ShellExt;
 
 #[tauri::command]
 async fn save_vault_token(token: String) -> Result<(), String> {
@@ -100,6 +105,147 @@ async fn read_vault_policy(url: String, token: String, name: String) -> Result<s
     Ok(body)
 }
 
+/// Helper function to wait for OAuth callback and extract code + state
+async fn wait_for_callback(listener: TcpListener) -> Result<(String, String), String> {
+    let (stream, _) = listener.accept().await.map_err(|e| e.to_string())?;
+    
+    let mut reader = BufReader::new(stream);
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line).await.map_err(|e| e.to_string())?;
+    
+    let parts: Vec<&str> = request_line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return Err("Invalid HTTP request".to_string());
+    }
+    
+    let path = parts[1];
+    let url = Url::parse(&format!("http://localhost{}", path)).map_err(|e| e.to_string())?;
+    
+    let mut code = None;
+    let mut state = None;
+    
+    for (key, value) in url.query_pairs() {
+        match key.as_ref() {
+            "code" => code = Some(value.to_string()),
+            "state" => state = Some(value.to_string()),
+            _ => {}
+        }
+    }
+    
+    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+        <html><body><h1>Authentication Successful</h1>\
+        <p>You may close this window and return to the application.</p></body></html>";
+    reader.into_inner().write_all(response.as_bytes()).await.map_err(|e| e.to_string())?;
+    
+    match (code, state) {
+        (Some(c), Some(s)) => Ok((c, s)),
+        _ => Err("Missing code or state parameter".to_string()),
+    }
+}
+
+#[tauri::command]
+async fn oidc_login(
+    app: tauri::AppHandle,
+    url: String,
+    mount_path: String,
+    role: String,
+) -> Result<(), String> {
+    log::info!("Starting OIDC login for role: {} on mount: {}", role, mount_path);
+    
+    let nonce: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(32)
+        .map(char::from)
+        .collect();
+    
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("Failed to bind to localhost: {}", e))?;
+    
+    let local_addr = listener.local_addr().map_err(|e| e.to_string())?;
+    let redirect_uri = format!("http://127.0.0.1:{}/oidc/callback", local_addr.port());
+    
+    log::info!("Listening for callback on: {}", redirect_uri);
+    
+    let client = reqwest::Client::new();
+    let auth_url_endpoint = format!("{}/v1/auth/{}/oidc/auth_url", url, mount_path);
+    
+    log::info!("Requesting auth URL from: {}", auth_url_endpoint);
+    
+    let auth_url_body = serde_json::json!({
+        "role": role,
+        "redirect_uri": redirect_uri,
+        "client_nonce": nonce
+    });
+    
+    let auth_response = client
+        .post(&auth_url_endpoint)
+        .json(&auth_url_body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to request auth URL: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Vault auth URL request failed: {}", e))?;
+    
+    let auth_data: serde_json::Value = auth_response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse auth URL response: {}", e))?;
+    
+    let auth_url = auth_data["data"]["auth_url"]
+        .as_str()
+        .ok_or("Missing auth_url in response")?
+        .to_string();
+    
+    log::info!("Opening browser for authentication");
+    
+    app.shell()
+        .open(&auth_url, None)
+        .map_err(|e| format!("Failed to open browser: {}", e))?;
+    
+    let callback_result = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        wait_for_callback(listener)
+    )
+    .await
+    .map_err(|_| "Authentication timed out after 120 seconds")?
+    .map_err(|e| format!("Callback error: {}", e))?;
+    
+    let (code, state) = callback_result;
+    
+    log::info!("Received callback, exchanging code for token");
+    
+    let callback_endpoint = format!(
+        "{}/v1/auth/{}/oidc/callback?state={}&code={}&client_nonce={}",
+        url, mount_path, state, code, nonce
+    );
+    
+    let token_response = client
+        .get(&callback_endpoint)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to exchange code for token: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Token exchange failed: {}", e))?;
+    
+    let token_data: serde_json::Value = token_response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse token response: {}", e))?;
+    
+    let client_token = token_data["auth"]["client_token"]
+        .as_str()
+        .ok_or("Missing client_token in response")?
+        .to_string();
+    
+    let entry = Entry::new("vault-desktop", "default-token").map_err(|e| e.to_string())?;
+    entry.set_password(&client_token).map_err(|e| e.to_string())?;
+    
+    log::info!("OIDC login successful, token stored in keyring");
+    
+    Ok(())
+}
+
 #[tauri::command]
 async fn check_vault_connection(url: String, token: String) -> Result<(), String> {
     let client = reqwest::Client::new();
@@ -192,7 +338,8 @@ pub fn run() {
             save_vault_secret,
             list_vault_policies,
             read_vault_policy,
-            check_vault_connection
+            check_vault_connection,
+            oidc_login
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -214,12 +361,57 @@ mod tests {
 
     #[test]
     fn test_profile_mock_structure() {
-        // Ensuring we can handle profiles as expected in the UI
         let profile = serde_json::json!({
             "name": "Dev",
             "url": "http://localhost:8200",
             "token": "hvs.test"
         });
         assert_eq!(profile["name"], "Dev");
+    }
+
+    #[test]
+    fn test_oidc_nonce_generation() {
+        let nonce: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect();
+        
+        assert_eq!(nonce.len(), 32);
+        assert!(nonce.chars().all(|c| c.is_alphanumeric()));
+    }
+
+    #[test]
+    fn test_oidc_auth_url_request_body() {
+        let body = serde_json::json!({
+            "role": "test-role",
+            "redirect_uri": "http://127.0.0.1:12345/oidc/callback",
+            "client_nonce": "abcd1234efgh5678ijkl9012mnop3456"
+        });
+        
+        assert_eq!(body["role"], "test-role");
+        assert_eq!(body["redirect_uri"], "http://127.0.0.1:12345/oidc/callback");
+        assert_eq!(body["client_nonce"], "abcd1234efgh5678ijkl9012mnop3456");
+        assert!(body["client_nonce"].as_str().unwrap().len() == 32);
+    }
+
+    #[test]
+    fn test_oidc_callback_url_parsing() {
+        let test_url = "http://localhost/oidc/callback?state=st_abc123&code=cd_xyz789";
+        let parsed = Url::parse(test_url).unwrap();
+        
+        let mut code = None;
+        let mut state = None;
+        
+        for (key, value) in parsed.query_pairs() {
+            match key.as_ref() {
+                "code" => code = Some(value.to_string()),
+                "state" => state = Some(value.to_string()),
+                _ => {}
+            }
+        }
+        
+        assert_eq!(code, Some("cd_xyz789".to_string()));
+        assert_eq!(state, Some("st_abc123".to_string()));
     }
 }
