@@ -49,6 +49,47 @@ Built using **Tauri**, **React**, and **Bun**, Vault-1 offers a native desktop e
    bun run tauri dev
    ```
 
+## 🔐 OIDC Authentication Setup
+
+Vault-1 supports OIDC (OpenID Connect) authentication for seamless login with identity providers like Google Workspace, Azure AD, and Okta.
+
+### Vault Server Configuration
+
+Your Vault server must have an OIDC auth method configured. The OIDC role must include:
+
+- **Allowed Redirect URIs**: `http://localhost/oidc/callback` (port-agnostic for desktop clients)
+- **Mount Path**: The path where your OIDC auth method is mounted (default: `oidc`)
+- **Role**: Optional role name (leave empty to use Vault's default role)
+
+Example Vault configuration:
+```bash
+vault write auth/oidc/role/default \
+  allowed_redirect_uris="http://localhost/oidc/callback" \
+  user_claim="sub" \
+  policies="default"
+```
+
+### Creating an OIDC Profile
+
+1. Open Vault-1 and go to Settings
+2. Click "Add New Profile"
+3. Select "OIDC" as the authentication method
+4. Enter your Vault server URL (e.g., `https://vault.example.com`)
+5. Configure OIDC settings:
+   - **Mount Path**: The auth mount path (default: `oidc`)
+   - **Role**: Your OIDC role name (optional, leave empty for default)
+6. Click "Save Profile"
+
+### Logging In with OIDC
+
+1. Select your OIDC profile from the login screen
+2. Click "Sign in with OIDC"
+3. Your browser will open for authentication
+4. Complete the login flow with your identity provider
+5. Return to Vault-1 - you'll be automatically logged in
+
+**Note**: The OIDC flow has a 120-second timeout. If authentication takes longer, you'll need to try again.
+
 ## 🔒 Security
 
 Vault-1 prioritizes your data's security:

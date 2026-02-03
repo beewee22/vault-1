@@ -1307,9 +1307,13 @@ function App() {
             const errorMessage = err.toString();
 
             if (errorMessage.includes("timed out")) {
-                setError("Authentication timed out. Please try again.");
+                setError("Authentication timed out after 120 seconds. Please try again.");
             } else if (errorMessage.includes("auth_url")) {
                 setError(`OIDC auth method not found at '${activeProfile.oidcMountPath || "oidc"}'. Check your profile configuration.`);
+            } else if (errorMessage.includes("callback") || errorMessage.includes("redirect_uri")) {
+                setError("OIDC callback failed. Your Vault role may not allow localhost callbacks.");
+            } else if (errorMessage.includes("Failed to request") || errorMessage.includes("Network")) {
+                setError("Network error: Could not reach Vault server.");
             } else {
                 setError("OIDC login failed: " + errorMessage);
             }
