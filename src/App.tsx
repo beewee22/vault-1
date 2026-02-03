@@ -865,7 +865,12 @@ function Dashboard({ url, token, activeTab, setActiveTab, favorites, recentlyUse
                 setSecrets(secretItems);
             }
         } catch (err: any) {
-            setError("Failed to fetch: " + err.toString());
+            const errorMessage = err.toString();
+            if (!currentPath && errorMessage.includes("403")) {
+                setError("Permission denied: Your Vault policy does not include sys/mounts read access. Please ask your Vault administrator to add the following policy:\n\npath \"sys/mounts\" {\n  capabilities = [\"read\"]\n}");
+            } else {
+                setError("Failed to fetch: " + errorMessage);
+            }
         } finally {
             setLoading(false);
         }
