@@ -1273,7 +1273,6 @@ function App() {
         setError("");
 
         try {
-            // Validate connection first
             await invoke("check_vault_connection", { url: vaultUrl, token });
 
             await invoke("save_vault_token", { token });
@@ -1282,6 +1281,38 @@ function App() {
         } catch (err: any) {
             console.error("Login error:", err);
             setError("Connection failed: " + err.toString());
+        } finally {
+            setIsLoggingIn(false);
+        }
+    };
+
+    const handleOidcLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoggingIn(true);
+        setError("");
+
+        try {
+            const receivedToken = await invoke<string>("oidc_login", {
+                url: vaultUrl,
+                mountPath: activeProfile.oidcMountPath || "oidc",
+                role: activeProfile.oidcRole || "",
+            });
+
+            setToken(receivedToken);
+            await invoke("save_vault_token", { token: receivedToken });
+            await new Promise(r => setTimeout(r, 800));
+            setIsLoggedIn(true);
+        } catch (err: any) {
+            console.error("OIDC login error:", err);
+            const errorMessage = err.toString();
+
+            if (errorMessage.includes("timed out")) {
+                setError("Authentication timed out. Please try again.");
+            } else if (errorMessage.includes("auth_url")) {
+                setError(`OIDC auth method not found at '${activeProfile.oidcMountPath || "oidc"}'. Check your profile configuration.`);
+            } else {
+                setError("OIDC login failed: " + errorMessage);
+            }
         } finally {
             setIsLoggingIn(false);
         }
@@ -1367,7 +1398,7 @@ function App() {
                     <p className="text-dim text-sm">Securely access your secrets and sensitive data.</p>
                 </div>
 
-                <form onSubmit={handleLogin} className="w-full space-y-6">
+                <form onSubmit={activeProfile.authMethod === "oidc" ? handleOidcLogin : handleLogin} className="w-full space-y-6">
                     <div className="space-y-4">
                         <div className="relative">
                             <label className="text-xs font-semibold text-mute uppercase tracking-widest ml-1 mb-2 block flex justify-between items-center">
@@ -1413,25 +1444,37 @@ function App() {
                                     value={vaultUrl}
                                     onChange={(e) => setVaultUrl(e.target.value)}
                                     className="input-premium pl-12"
+                                    readOnly={activeProfile.authMethod === "oidc"}
                                 />
                             </div>
                         </div>
 
-                        <div className="relative">
-                            <label className="text-xs font-semibold text-mute uppercase tracking-widest ml-1 mb-2 block">
-                                Access Token
-                            </label>
-                            <div className="relative">
-                                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-mute/50" />
-                                <input
-                                    type="password"
-                                    value={token}
-                                    onChange={(e) => setToken(e.target.value)}
-                                    placeholder="hvs.xxxxxxxxxxxx"
-                                    className="input-premium pl-12"
-                                />
+                        {activeProfile.authMethod === "oidc" && (
+                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
+                                <div className="flex items-center gap-2 text-blue-400 text-sm">
+                                    <ShieldCheck className="w-4 h-4" />
+                                    <span className="font-medium">OIDC via {activeProfile.oidcMountPath || "oidc"}</span>
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {activeProfile.authMethod === "token" && (
+                            <div className="relative">
+                                <label className="text-xs font-semibold text-mute uppercase tracking-widest ml-1 mb-2 block">
+                                    Access Token
+                                </label>
+                                <div className="relative">
+                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-mute/50" />
+                                    <input
+                                        type="password"
+                                        value={token}
+                                        onChange={(e) => setToken(e.target.value)}
+                                        placeholder="hvs.xxxxxxxxxxxx"
+                                        className="input-premium pl-12"
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <button
@@ -1440,9 +1483,20 @@ function App() {
                         className="btn-premium w-full flex items-center justify-center gap-2 mt-4"
                     >
                         {isLoggingIn ? (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            activeProfile.authMethod === "oidc" ? (
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <span className="text-xs text-mute">Waiting for browser authentication...</span>
+                                </div>
+                            ) : (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            )
                         ) : (
-                            <>Unlock Vault <ChevronRight className="w-4 h-4" /></>
+                            activeProfile.authMethod === "oidc" ? (
+                                <>Sign in with OIDC <ChevronRight className="w-4 h-4" /></>
+                            ) : (
+                                <>Unlock Vault <ChevronRight className="w-4 h-4" /></>
+                            )
                         )}
                     </button>
                 </form>
