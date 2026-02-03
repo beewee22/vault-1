@@ -149,7 +149,7 @@ async fn oidc_login(
     url: String,
     mount_path: String,
     role: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let url = url.trim_end_matches('/').to_string();
     log::info!("Starting OIDC login for role: {} on mount: {}", role, mount_path);
     
@@ -274,7 +274,7 @@ async fn oidc_login(
     
     log::info!("OIDC login successful, token stored in keyring");
     
-    Ok(())
+    Ok(client_token)
 }
 
 #[tauri::command]
