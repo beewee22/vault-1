@@ -7,7 +7,7 @@ import {
     Eye, Copy, MoreHorizontal, ExternalLink, RefreshCw,
     Plus, X, Trash2, Check, Shield, EyeOff
 } from "lucide-react";
-import { migrateProfiles } from "./types";
+import { migrateProfiles, AUTH_METHODS, type VaultProfile, type AuthMethod } from "./types";
 
 // --- Components ---
 
@@ -422,27 +422,71 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     );
 }
 
-function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (name: string, url: string, token: string) => void }) {
+function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (profile: Omit<VaultProfile, "id">) => void }) {
     const [name, setName] = useState("");
     const [url, setUrl] = useState("http://0.0.0.0:8200");
-    const [token, setToken] = useState("");
+    const [authMethod, setAuthMethod] = useState<AuthMethod>("token");
+    const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
     const [isValidating, setIsValidating] = useState(false);
     const [error, setError] = useState("");
 
+    const selectedMethod = AUTH_METHODS.find(m => m.id === authMethod)!;
+
+    const updateFieldValue = (key: string, value: string) => {
+        setFieldValues(prev => ({ ...prev, [key]: value }));
+    };
+
+    const getFieldValue = (key: string): string => {
+        if (fieldValues[key] !== undefined) return fieldValues[key];
+        const field = selectedMethod.fields.find(f => f.key === key);
+        return field?.defaultValue || "";
+    };
+
+    const isFormValid = () => {
+        if (!name || !url) return false;
+        const requiredFields = selectedMethod.fields.filter(f => f.required);
+        return requiredFields.every(field => getFieldValue(field.key).trim() !== "");
+    };
+
     const handleSaveProfile = async () => {
-        if (!name || !url || !token) return;
+        if (!isFormValid()) return;
         setIsValidating(true);
         setError("");
 
         try {
-            await invoke("check_vault_connection", { url, token });
-            onSave(name, url, token);
+            if (authMethod === "token") {
+                const token = getFieldValue("token");
+                await invoke("check_vault_connection", { url, token });
+                onSave({
+                    name,
+                    url,
+                    token,
+                    authMethod: "token"
+                });
+            } else if (authMethod === "oidc") {
+                const mountPath = getFieldValue("mount_path");
+                const role = getFieldValue("role");
+                onSave({
+                    name,
+                    url,
+                    token: "",
+                    authMethod: "oidc",
+                    oidcMountPath: mountPath,
+                    oidcRole: role || undefined
+                });
+            }
             onClose();
         } catch (err: any) {
             setError("Connection failed: " + err.toString());
         } finally {
             setIsValidating(false);
         }
+    };
+
+    const handleAuthMethodChange = (newMethod: AuthMethod) => {
+        setAuthMethod(newMethod);
+        setFieldValues({});
+        setError("");
     };
 
     return (
@@ -458,6 +502,26 @@ function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (na
                             {error}
                         </div>
                     )}
+                    
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-mute uppercase tracking-widest ml-1">Authentication Method</label>
+                        <select
+                            value={authMethod}
+                            onChange={(e) => handleAuthMethodChange(e.target.value as AuthMethod)}
+                            className="input-premium"
+                        >
+                            {AUTH_METHODS.map(method => (
+                                <option key={method.id} value={method.id}>{method.label}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {authMethod === "oidc" && (
+                        <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 text-xs">
+                            OIDC authentication will happen at login.
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-mute uppercase tracking-widest ml-1">Profile Name</label>
                         <input
@@ -476,19 +540,26 @@ function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (na
                             className="input-premium"
                         />
                     </div>
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-mute uppercase tracking-widest ml-1">Access Token</label>
-                        <input
-                            type="password"
-                            value={token}
-                            onChange={(e) => setToken(e.target.value)}
-                            placeholder="hvs.xxxxxxxx"
-                            className="input-premium"
-                        />
-                    </div>
+
+                    {selectedMethod.fields.map(field => (
+                        <div key={field.key} className="space-y-2">
+                            <label className="text-xs font-bold text-mute uppercase tracking-widest ml-1">
+                                {field.label}
+                                {!field.required && <span className="text-mute/60 ml-1">(Optional)</span>}
+                            </label>
+                            <input
+                                type={field.type}
+                                value={getFieldValue(field.key)}
+                                onChange={(e) => updateFieldValue(field.key, e.target.value)}
+                                placeholder={field.placeholder}
+                                className="input-premium"
+                            />
+                        </div>
+                    ))}
+
                     <button
                         onClick={handleSaveProfile}
-                        disabled={!name || !url || !token || isValidating}
+                        disabled={!isFormValid() || isValidating}
                         className="btn-premium w-full py-4 text-sm font-bold flex items-center justify-center gap-2 mt-2"
                     >
                         {isValidating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><Plus className="w-4 h-4" /> Save Profile</>}
@@ -1169,8 +1240,11 @@ function App() {
         });
     };
 
-    const saveProfile = (name: string, url: string, token: string) => {
-        const newProfile = { id: Date.now().toString(), name, url, token, authMethod: "token" as const };
+    const saveProfile = (profile: Omit<VaultProfile, "id">) => {
+        const newProfile: VaultProfile = { 
+            id: Date.now().toString(), 
+            ...profile 
+        };
         setProfiles(prev => [...prev, newProfile]);
         setActiveProfileId(newProfile.id);
     };
@@ -1302,7 +1376,12 @@ function App() {
                                     type="button"
                                     onClick={() => {
                                         const name = prompt("Profile Name?");
-                                        if (name) saveProfile(name, vaultUrl, token);
+                                        if (name) saveProfile({ 
+                                            name, 
+                                            url: vaultUrl, 
+                                            token, 
+                                            authMethod: "token" 
+                                        });
                                     }}
                                     className="text-[10px] text-brand hover:brightness-125 transition-all lowercase"
                                 >
