@@ -159,9 +159,9 @@ async fn oidc_login(
         .map(char::from)
         .collect();
     
-    let listener = TcpListener::bind("127.0.0.1:0")
+    let listener = TcpListener::bind("127.0.0.1:8250")
         .await
-        .map_err(|e| format!("Failed to bind to localhost: {}", e))?;
+        .map_err(|e| format!("Failed to start OIDC callback listener on port 8250: {}. Is another Vault client (CLI or another Vault-1 instance) already running? Check with: lsof -i :8250", e))?;
     
     let local_addr = listener.local_addr().map_err(|e| e.to_string())?;
     let redirect_uri = format!("http://localhost:{}/oidc/callback", local_addr.port());

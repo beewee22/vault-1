@@ -57,17 +57,31 @@ Vault-1 supports OIDC (OpenID Connect) authentication for seamless login with id
 
 Your Vault server must have an OIDC auth method configured. The OIDC role must include:
 
-- **Allowed Redirect URIs**: `http://localhost/oidc/callback` (port-agnostic for desktop clients)
+- **Allowed Redirect URIs**: `http://localhost:8250/oidc/callback`
 - **Mount Path**: The path where your OIDC auth method is mounted (default: `oidc`)
 - **Role**: Optional role name (leave empty to use Vault's default role)
 
 Example Vault configuration:
 ```bash
 vault write auth/oidc/role/default \
-  allowed_redirect_uris="http://localhost/oidc/callback" \
+  allowed_redirect_uris="http://localhost:8250/oidc/callback" \
   user_claim="sub" \
   policies="default"
 ```
+
+### OIDC Provider Setup
+
+Vault-1 uses port 8250 for the OIDC callback, following the [RFC 8252](https://tools.ietf.org/html/rfc8252) standard for OAuth 2.0 loopback redirect URIs. When registering Vault-1 with your OIDC provider, use the exact redirect URI: `http://localhost:8250/oidc/callback`
+
+**Google OAuth Example:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Select your project and navigate to "APIs & Services" → "Credentials"
+3. Click "Create Credentials" → "OAuth 2.0 Client ID" → "Desktop application"
+4. Under "Authorized redirect URIs", add: `http://localhost:8250/oidc/callback`
+5. Save and copy your Client ID and Client Secret
+6. Configure your Vault OIDC auth method with these credentials
+
+For other providers (Azure AD, Okta, etc.), follow similar steps and ensure the redirect URI is exactly `http://localhost:8250/oidc/callback`.
 
 ### Creating an OIDC Profile
 
@@ -88,7 +102,17 @@ vault write auth/oidc/role/default \
 4. Complete the login flow with your identity provider
 5. Return to Vault-1 - you'll be automatically logged in
 
-**Note**: The OIDC flow has a 120-second timeout. If authentication takes longer, you'll need to try again.
+### Troubleshooting
+
+**Port 8250 Already in Use:**
+If you see an error about port 8250 being unavailable, another Vault client (CLI or another Vault-1 instance) may be running. Check with:
+```bash
+lsof -i :8250
+```
+Close the conflicting application or wait for it to release the port.
+
+**Authentication Timeout:**
+The OIDC flow has a 120-second timeout. If authentication takes longer, you'll need to try again. Ensure your identity provider is responsive and your network connection is stable.
 
 ## 🔒 Security
 
