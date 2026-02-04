@@ -1216,28 +1216,63 @@ function App() {
         localStorage.setItem("vault_profiles", JSON.stringify(profiles));
     }, [profiles]);
 
+    // Load profile-specific data on profile switch
     useEffect(() => {
         setVaultUrl(activeProfile.url);
         setToken(activeProfile.token);
+        
+        // Load profile-scoped favorites and recently used
+        const favKey = `vault_favorites_${activeProfileId}`;
+        const recentKey = `vault_recent_${activeProfileId}`;
+        
+        const savedFavs = localStorage.getItem(favKey);
+        const savedRecent = localStorage.getItem(recentKey);
+        
+        setFavorites(savedFavs ? JSON.parse(savedFavs) : []);
+        setRecentlyUsed(savedRecent ? JSON.parse(savedRecent) : []);
     }, [activeProfileId]);
 
+    // Migration: Move global data to first profile
+    useEffect(() => {
+        const globalFavs = localStorage.getItem("vault_favorites");
+        const globalRecent = localStorage.getItem("vault_recent");
+        
+        if (globalFavs && profiles.length > 0) {
+            const firstProfileId = profiles[0].id;
+            const scopedKey = `vault_favorites_${firstProfileId}`;
+            
+            if (!localStorage.getItem(scopedKey)) {
+                localStorage.setItem(scopedKey, globalFavs);
+                localStorage.removeItem("vault_favorites");
+            }
+        }
+        
+        if (globalRecent && profiles.length > 0) {
+            const firstProfileId = profiles[0].id;
+            const scopedKey = `vault_recent_${firstProfileId}`;
+            
+            if (!localStorage.getItem(scopedKey)) {
+                localStorage.setItem(scopedKey, globalRecent);
+                localStorage.removeItem("vault_recent");
+            }
+        }
+    }, [profiles]);
+
     const [error, setError] = useState("");
-    const [favorites, setFavorites] = useState<any[]>(() => {
-        const saved = localStorage.getItem("vault_favorites");
-        return saved ? JSON.parse(saved) : [];
-    });
-    const [recentlyUsed, setRecentlyUsed] = useState<any[]>(() => {
-        const saved = localStorage.getItem("vault_recent");
-        return saved ? JSON.parse(saved) : [];
-    });
+    const [favorites, setFavorites] = useState<any[]>([]);
+    const [recentlyUsed, setRecentlyUsed] = useState<any[]>([]);
 
     useEffect(() => {
-        localStorage.setItem("vault_favorites", JSON.stringify(favorites));
-    }, [favorites]);
+        if (activeProfileId) {
+            localStorage.setItem(`vault_favorites_${activeProfileId}`, JSON.stringify(favorites));
+        }
+    }, [favorites, activeProfileId]);
 
     useEffect(() => {
-        localStorage.setItem("vault_recent", JSON.stringify(recentlyUsed));
-    }, [recentlyUsed]);
+        if (activeProfileId) {
+            localStorage.setItem(`vault_recent_${activeProfileId}`, JSON.stringify(recentlyUsed));
+        }
+    }, [recentlyUsed, activeProfileId]);
 
     const addToRecent = (secret: any) => {
         setRecentlyUsed(prev => {
