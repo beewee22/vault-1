@@ -1543,13 +1543,13 @@ function App() {
                     <span>Encrypted connection with end-to-end security</span>
                 </div>
 
-                {isLoginAddProfileOpen && (
-                    <AddProfileModal 
-                        onClose={() => setIsLoginAddProfileOpen(false)} 
-                        onSave={saveProfile} 
-                    />
-                )}
             </div>
+            {isLoginAddProfileOpen && (
+                <AddProfileModal
+                    onClose={() => setIsLoginAddProfileOpen(false)}
+                    onSave={saveProfile}
+                />
+            )}
         </div>
     );
 }
