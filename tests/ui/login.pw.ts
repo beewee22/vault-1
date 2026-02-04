@@ -1,21 +1,8 @@
 import { test, expect } from "@playwright/test";
-
-declare global {
-  interface Window {
-    __TAURI__?: {
-      invoke: (command: string, args?: unknown) => Promise<unknown>;
-    };
-  }
-}
-
-const tauriStub = () => {
-  window.__TAURI__ = {
-    invoke: async () => ({ data: {} }),
-  };
-};
+import { installTauriMock } from "./tauri-mock";
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(tauriStub);
+  await installTauriMock(page);
 });
 
 test("login Add New opens profile modal", async ({ page }) => {
