@@ -33,7 +33,7 @@ const defaultData: Required<MockData> = {
   },
   secrets: {
     "secret/data/config": { username: "admin", env: "prod" },
-    "secret/data/app/db": { password: "hunter2" },
+    "secret/data/app/db": { password: "example-password" },
   },
   policies: ["default", "dev"],
 };

@@ -3,7 +3,7 @@ import { installTauriMock, stabilizeUi } from "./tauri-mock";
 
 const loginWithToken = async (page: any) => {
   await page.goto("/");
-  await page.getByPlaceholder("hvs.xxxxxxxxxxxx").fill("hvs.test-token");
+  await page.getByPlaceholder("hvs.xxxxxxxxxxxx").fill("mock-vault-token");
   await page.getByRole("button", { name: "Unlock Vault" }).click();
 };
 
