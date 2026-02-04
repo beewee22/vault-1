@@ -1370,6 +1370,7 @@ function App() {
                     {/* Sidebar Overlay for Mobile */}
                     {isSidebarOpen && (
                         <div
+                            data-testid="sidebar-overlay"
                             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] md:hidden"
                             onClick={() => setIsSidebarOpen(false)}
                         />
@@ -1388,6 +1389,7 @@ function App() {
                     <div className="flex-1 flex flex-col min-w-0 relative">
                         <div className="h-14 md:hidden border-b border-white/5 flex items-center px-4 bg-black/20">
                             <button
+                                aria-label="Menu"
                                 onClick={() => setIsSidebarOpen(true)}
                                 className="p-2 -ml-2 text-mute hover:text-main"
                             >

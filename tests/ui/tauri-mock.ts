@@ -96,3 +96,14 @@ export async function installTauriMock(page: Page, data: MockData = {}) {
     };
   }, { payload: merged });
 }
+
+export async function stabilizeUi(page: Page) {
+  await page.addStyleTag({
+    content: `* {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+      transition-duration: 0s !important;
+      caret-color: transparent !important;
+    }`,
+  });
+}

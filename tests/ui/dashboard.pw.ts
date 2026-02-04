@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { installTauriMock } from "./tauri-mock";
+import { installTauriMock, stabilizeUi } from "./tauri-mock";
 
 const loginWithToken = async (page: any) => {
   await page.goto("/");
@@ -9,6 +9,7 @@ const loginWithToken = async (page: any) => {
 
 test.beforeEach(async ({ page }) => {
   await installTauriMock(page);
+  await stabilizeUi(page);
 });
 
 test("login shows mounts list", async ({ page }) => {

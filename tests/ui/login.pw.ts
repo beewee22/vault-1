@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { installTauriMock } from "./tauri-mock";
+import { installTauriMock, stabilizeUi } from "./tauri-mock";
 
 test.beforeEach(async ({ page }) => {
   await installTauriMock(page);
+  await stabilizeUi(page);
 });
 
 test("login Add New opens profile modal", async ({ page }) => {
