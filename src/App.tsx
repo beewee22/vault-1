@@ -494,7 +494,7 @@ function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (pr
             <div className="w-full max-w-md glass rounded-[32px] overflow-hidden border-main flex flex-col animate-in zoom-in duration-300">
                 <div className="p-6 border-b border-main flex items-center justify-between text-main">
                     <h2 className="text-xl font-bold">Add Vault Profile</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors text-mute hover:text-main"><X className="w-5 h-5" /></button>
+                    <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-white/10 rounded-full transition-colors text-mute hover:text-main"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="p-8 space-y-6">
                     {error && (

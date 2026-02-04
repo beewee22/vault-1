@@ -28,6 +28,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.tsbuildinfo
 .vite
 
+# Playwright
+playwright-report
+test-results
+
 # IDEs
 .idea
 .vscode
