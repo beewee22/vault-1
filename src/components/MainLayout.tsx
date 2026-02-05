@@ -3,6 +3,7 @@ import Sidebar from "./Sidebar";
 import LockScreen from "./LockScreen";
 import SettingsView from "./SettingsView";
 import Dashboard from "./Dashboard";
+import { ToastContainer } from "./Toast";
 
 function MainLayout({ uiSnap, profileSnap, authSnap, vaultSnap, uiActions, profileActions, vaultActions, handleLogout }: any) {
     return (
@@ -64,6 +65,7 @@ function MainLayout({ uiSnap, profileSnap, authSnap, vaultSnap, uiActions, profi
                 </div>
             </div>
             {uiSnap.isLocked && <LockScreen onUnlock={() => uiActions.unlock()} />}
+            <ToastContainer />
         </>
     );
 }
