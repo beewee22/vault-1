@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import {
-    Key, ChevronRight, Star, Clock, Eye, EyeOff, Copy, Check, ExternalLink, Pencil
+    Key, ChevronRight, Star, Clock, ExternalLink, Pencil
 } from "lucide-react";
 import { toDataPath } from "../../utils/vault-path";
 import FieldsDisplay from "./FieldsDisplay";
 import FieldsEditor from "./FieldsEditor";
+import DeleteActions from "./DeleteActions";
+import VersionHistory from "./VersionHistory";
 
 interface DetailViewProps {
     secret: any;
@@ -26,6 +28,8 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [currentVersion, setCurrentVersion] = useState<number>(0);
+    const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+    const [comparingVersions, setComparingVersions] = useState<[number, number] | null>(null);
 
     const handleCopy = async (key: string, value: any) => {
         const textToCopy = typeof value === 'string' ? value : JSON.stringify(value);
@@ -38,7 +42,7 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
         }
     };
 
-    const fetchSecretData = async () => {
+    const fetchSecretData = async (version?: number | null) => {
         setLoading(true);
         try {
             let dataPath = secret.path;
@@ -46,16 +50,25 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                 dataPath = toDataPath(secret.path);
             }
 
-            const res: any = await invoke("fetch_vault_secret", {
+            const params: any = {
                 url,
                 token,
                 path: dataPath,
-            });
+            };
+
+            if (version !== null && version !== undefined) {
+                params.version = version;
+            }
+
+            const res: any = await invoke("fetch_vault_secret", params);
 
             const data = res.data?.data || {};
             const metadata = res.data?.metadata || {};
-            const version = metadata.version || 0;
-            setCurrentVersion(version);
+            const fetchedVersion = metadata.version || 0;
+            
+            if (version === null || version === undefined) {
+                setCurrentVersion(fetchedVersion);
+            }
 
             const fieldItems = Object.keys(data).map(key => ({
                 key,
@@ -75,7 +88,27 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
         fetchSecretData();
         onItemView?.(secret);
         setIsEditing(false);
+        setViewingVersion(null);
+        setComparingVersions(null);
     }, [secret.path]);
+
+    useEffect(() => {
+        if (viewingVersion !== null) {
+            fetchSecretData(viewingVersion);
+        }
+    }, [viewingVersion]);
+
+    const handleViewVersion = (version: number | null) => {
+        setViewingVersion(version);
+        setComparingVersions(null);
+        setIsEditing(false);
+    };
+
+    const handleCompare = (versions: [number, number]) => {
+        setComparingVersions(versions);
+        setViewingVersion(null);
+        setIsEditing(false);
+    };
 
     const toggleValue = (key: string) => {
         setShowValues(prev => ({ ...prev, [key]: !prev[key] }));
@@ -140,29 +173,68 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                         <div className="w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
                     </div>
                 ) : (
-                    <div className="glass rounded-[32px] overflow-hidden border-white/5">
-                        <div className="p-6 space-y-1">
-                            {isEditing ? (
-                                <FieldsEditor
-                                    fields={fields}
-                                    currentVersion={currentVersion}
-                                    url={url}
-                                    token={token}
-                                    secretPath={secret.path}
-                                    onSave={handleSaveEdit}
-                                    onCancel={handleCancelEdit}
-                                />
-                            ) : (
-                                <FieldsDisplay
-                                    fields={fields}
-                                    showValues={showValues}
-                                    onToggleShow={toggleValue}
-                                    onCopy={handleCopy}
-                                    copiedKey={copiedKey}
-                                />
+                    <>
+                        <div className="glass rounded-[32px] overflow-hidden border-white/5">
+                            {viewingVersion !== null && (
+                                <div className="px-6 py-3 bg-brand/10 border-b border-white/5 flex items-center justify-between">
+                                    <span className="text-xs text-brand font-medium">
+                                        Viewing Version {viewingVersion} (read-only)
+                                    </span>
+                                    <button
+                                        onClick={() => handleViewVersion(null)}
+                                        className="text-xs text-brand hover:text-brand/80 underline"
+                                    >
+                                        Back to current version
+                                    </button>
+                                </div>
                             )}
+                            
+                            <div className="p-6 space-y-1">
+                                {isEditing ? (
+                                    <FieldsEditor
+                                        fields={fields}
+                                        currentVersion={currentVersion}
+                                        url={url}
+                                        token={token}
+                                        secretPath={secret.path}
+                                        onSave={handleSaveEdit}
+                                        onCancel={handleCancelEdit}
+                                    />
+                                ) : (
+                                    <FieldsDisplay
+                                        fields={fields}
+                                        showValues={showValues}
+                                        onToggleShow={toggleValue}
+                                        onCopy={handleCopy}
+                                        copiedKey={copiedKey}
+                                    />
+                                )}
+                            </div>
                         </div>
-                    </div>
+
+                        {!isEditing && (
+                            <VersionHistory
+                                secret={secret}
+                                mountType={mountType}
+                                currentVersion={currentVersion}
+                                url={url}
+                                token={token}
+                                onViewVersion={handleViewVersion}
+                                onCompare={handleCompare}
+                            />
+                        )}
+
+                        <DeleteActions
+                            secret={secret}
+                            currentVersion={currentVersion}
+                            url={url}
+                            token={token}
+                            mountType={mountType}
+                            isEditing={isEditing}
+                            onDelete={onBack}
+                            onDestroy={onBack}
+                        />
+                    </>
                 )}
 
                 <div className="mt-8 flex items-center justify-between px-6 py-4 glass rounded-2xl border-white/5">
