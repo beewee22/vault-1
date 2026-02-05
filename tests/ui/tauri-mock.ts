@@ -55,6 +55,19 @@ export async function installTauriMock(page: Page, data: MockData = {}) {
           return { data: payload.mounts };
         }
 
+        if (args?.path?.includes("/metadata/")) {
+          return {
+            data: {
+              versions: {
+                1: { created_time: "2026-02-01T10:00:00Z", deletion_time: "", destroyed: false },
+                2: { created_time: "2026-02-03T12:00:00Z", deletion_time: "2026-02-04T14:00:00Z", destroyed: false },
+                3: { created_time: "2026-02-05T06:00:00Z", deletion_time: "", destroyed: false }
+              },
+              current_version: 3
+            }
+          };
+        }
+
         const secretData = payload.secrets[args?.path] || {};
         return {
           data: {
