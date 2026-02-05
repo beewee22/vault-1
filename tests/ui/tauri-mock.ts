@@ -47,7 +47,11 @@ export async function installTauriMock(page: Page, data: MockData = {}) {
   };
 
   await page.addInitScript(({ payload }) => {
+    const savedProfiles = localStorage.getItem('vault_profiles');
+    const savedActiveProfile = localStorage.getItem('vault_active_profile');
     localStorage.clear();
+    if (savedProfiles) localStorage.setItem('vault_profiles', savedProfiles);
+    if (savedActiveProfile) localStorage.setItem('vault_active_profile', savedActiveProfile);
 
     const respond = (command: string, args?: any) => {
       if (command === "fetch_vault_secret") {
@@ -133,11 +137,19 @@ export async function installTauriMock(page: Page, data: MockData = {}) {
         return { ok: true };
       }
 
-      if (command === "read_vault_policy") {
-        return { data: { rules: "path \"secret/*\" { capabilities = [\"read\"] }" } };
-      }
+       if (command === "read_vault_policy") {
+         return { data: { rules: "path \"secret/*\" { capabilities = [\"read\"] }" } };
+       }
 
-      return {};
+       if (command === "oidc_login") {
+         (window as any).__OIDC_LOGIN_ARGS__ = args;
+         if (!args?.url || args.url.trim() === '') {
+           throw "Vault URL is empty. Please configure a URL in your profile settings.";
+         }
+         return "hvs.mock-oidc-token";
+       }
+
+       return {};
     };
 
     window.__TAURI_INTERNALS__ = window.__TAURI_INTERNALS__ || {};
