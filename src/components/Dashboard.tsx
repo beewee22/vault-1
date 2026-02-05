@@ -212,7 +212,7 @@ function Dashboard({ url, token, activeTab, setActiveTab, favorites, recentlyUse
             if (currentPath.startsWith("secret/")) {
                 savePath = currentPath.replace("secret/", "secret/data/") + name;
             }
-            await invoke("save_vault_secret", { url, token, path: savePath, data });
+            const result = await invoke("save_vault_secret", { url, token, path: savePath, data });
             fetchSecrets();
         } catch (err: any) {
             console.error("Error saving secret:", err);

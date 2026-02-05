@@ -20,10 +20,16 @@ async fn get_vault_token() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn fetch_vault_secret(url: String, token: String, path: String) -> Result<serde_json::Value, String> {
+async fn fetch_vault_secret(url: String, token: String, path: String, version: Option<u64>) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
+    let mut full_url = format!("{}/v1/{}", url, path);
+    
+    if let Some(v) = version {
+        full_url = format!("{}?version={}", full_url, v);
+    }
+    
     let res = client
-        .get(format!("{}/v1/{}", url, path))
+        .get(&full_url)
         .header("X-Vault-Token", token)
         .send()
         .await
@@ -52,12 +58,40 @@ async fn list_vault_secrets(url: String, token: String, path: String) -> Result<
 }
 
 #[tauri::command]
-async fn save_vault_secret(url: String, token: String, path: String, data: serde_json::Value) -> Result<(), String> {
+async fn save_vault_secret(url: String, token: String, path: String, data: serde_json::Value, cas: Option<u64>) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
     
-    // For KV V2, data must be wrapped in a "data" field
+    let body = if let Some(cas_version) = cas {
+        serde_json::json!({
+            "options": {"cas": cas_version},
+            "data": data
+        })
+    } else {
+        serde_json::json!({
+            "data": data
+        })
+    };
+
+    let res = client
+        .post(format!("{}/v1/{}", url, path))
+        .header("X-Vault-Token", token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+
+    let json = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
+    Ok(json)
+}
+
+#[tauri::command]
+async fn delete_vault_secret(url: String, token: String, path: String, versions: Vec<u64>) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    
     let body = serde_json::json!({
-        "data": data
+        "versions": versions
     });
 
     client
@@ -71,6 +105,64 @@ async fn save_vault_secret(url: String, token: String, path: String, data: serde
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+async fn destroy_vault_secret(url: String, token: String, path: String, versions: Vec<u64>) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    
+    let body = serde_json::json!({
+        "versions": versions
+    });
+
+    client
+        .put(format!("{}/v1/{}", url, path))
+        .header("X-Vault-Token", token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn undelete_vault_secret(url: String, token: String, path: String, versions: Vec<u64>) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    
+    let body = serde_json::json!({
+        "versions": versions
+    });
+
+    client
+        .post(format!("{}/v1/{}", url, path))
+        .header("X-Vault-Token", token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn fetch_vault_metadata(url: String, token: String, path: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let res = client
+        .get(format!("{}/v1/{}", url, path))
+        .header("X-Vault-Token", token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+
+    let body = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
+    Ok(body)
 }
 
 #[tauri::command]
@@ -367,6 +459,10 @@ pub fn run() {
             fetch_vault_secret,
             list_vault_secrets,
             save_vault_secret,
+            delete_vault_secret,
+            destroy_vault_secret,
+            undelete_vault_secret,
+            fetch_vault_metadata,
             list_vault_policies,
             read_vault_policy,
             check_vault_connection,
