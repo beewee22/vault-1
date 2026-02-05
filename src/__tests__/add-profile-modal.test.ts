@@ -1,5 +1,17 @@
+// localStorage mock - must be before imports
+const storage: Record<string, string> = {};
+globalThis.localStorage = {
+  getItem: (key: string) => storage[key] ?? null,
+  setItem: (key: string, value: string) => { storage[key] = value; },
+  removeItem: (key: string) => { delete storage[key]; },
+  clear: () => { Object.keys(storage).forEach(k => delete storage[k]); },
+  get length() { return Object.keys(storage).length; },
+  key: (i: number) => Object.keys(storage)[i] ?? null,
+} as Storage;
+
 import { test, expect } from "bun:test";
 import { AUTH_METHODS } from "../types";
+import { profileStore, profileActions } from "../stores/profile";
 
 // ====================
 // TASK 5: AddProfileModal Dynamic Auth Method Selector Tests
@@ -26,82 +38,115 @@ test("AUTH_METHODS configuration is available and has correct structure", () => 
   expect(oidcMethod?.fields[1].key).toBe("role");
 });
 
-test("AddProfileModal should default to 'token' auth method", () => {
-  // BDD: Given a new AddProfileModal
-  // When it is rendered
-  // Then the default auth method should be "token"
+test("profileActions.addProfile should accept OIDC config and store oidcMountPath", () => {
+  profileStore.profiles.splice(0);
+  Object.keys(storage).forEach(k => delete storage[k]);
   
-  // This test will initially FAIL because AddProfileModal doesn't have authMethod state yet
-  // Expected behavior: Component should initialize with authMethod = "token"
+  const oidcProfile = {
+    name: "OIDC Dev",
+    url: "https://vault.dev.io",
+    token: "",
+    authMethod: "oidc" as const,
+    oidcMountPath: "oidc",
+    oidcRole: "my-role",
+  };
   
-  // Test strategy: This would require React Testing Library to verify
-  // For now, documenting expected behavior - implementation will follow
-  expect(true).toBe(true); // Placeholder - full test requires DOM rendering
+  const result = profileActions.addProfile(oidcProfile);
+  
+  expect(result.oidcMountPath).toBe("oidc");
+  expect(result.authMethod).toBe("oidc");
 });
 
-test("AddProfileModal should dynamically render fields based on selected auth method", () => {
-  // BDD: Given AddProfileModal with auth method selector
-  // When user selects "token" method
-  // Then only token field should be visible
-  // When user selects "oidc" method
-  // Then mount_path and role fields should be visible, token field hidden
+test("profileActions.addProfile should store oidcRole for OIDC profiles", () => {
+  profileStore.profiles.splice(0);
+  Object.keys(storage).forEach(k => delete storage[k]);
   
-  // This test will initially FAIL because dynamic rendering isn't implemented yet
-  // Expected behavior: Fields should change based on AUTH_METHODS[selectedMethod].fields
+  const oidcProfile = {
+    name: "OIDC Prod",
+    url: "https://vault.prod.io",
+    token: "",
+    authMethod: "oidc" as const,
+    oidcMountPath: "custom-oidc",
+    oidcRole: "admin-role",
+  };
   
-  // Test strategy: Would require React Testing Library
-  expect(true).toBe(true); // Placeholder - full test requires DOM rendering
+  const result = profileActions.addProfile(oidcProfile);
+  
+  expect(result.oidcRole).toBe("admin-role");
+  expect(result.oidcMountPath).toBe("custom-oidc");
 });
 
-test("AddProfileModal should skip validation for OIDC profiles", () => {
-  // BDD: Given AddProfileModal with OIDC method selected
-  // When user clicks Save Profile button
-  // Then check_vault_connection should NOT be called
-  // And onSave should be called immediately with OIDC profile data
+test("profileActions.addProfile should accept token config without OIDC fields", () => {
+  profileStore.profiles.splice(0);
+  Object.keys(storage).forEach(k => delete storage[k]);
   
-  // This test will initially FAIL because validation skipping isn't implemented yet
-  // Expected behavior: OIDC profiles bypass check_vault_connection
+  const tokenProfile = {
+    name: "Token Dev",
+    url: "https://vault.dev.io",
+    token: "s.abc123xyz",
+    authMethod: "token" as const,
+  };
   
-  // Test strategy: Would require mocking invoke() and verifying it's not called
-  expect(true).toBe(true); // Placeholder - full test requires component testing
+  const result = profileActions.addProfile(tokenProfile);
+  
+  expect(result.authMethod).toBe("token");
+  expect(result.token).toBe("s.abc123xyz");
+  expect(result.oidcMountPath).toBeUndefined();
+  expect(result.oidcRole).toBeUndefined();
 });
 
-test("AddProfileModal should validate connection for Token profiles", () => {
-  // BDD: Given AddProfileModal with Token method selected
-  // When user clicks Save Profile button
-  // Then check_vault_connection should be called
-  // And onSave should only be called if validation succeeds
+test("profileActions.addProfile should add profile to profileStore.profiles", () => {
+  profileStore.profiles.splice(0);
+  Object.keys(storage).forEach(k => delete storage[k]);
   
-  // This test will initially FAIL initially but should PASS after implementation
-  // Expected behavior: Existing token validation behavior preserved
+  const profile = {
+    name: "New Profile",
+    url: "https://vault.example.io",
+    token: "token123",
+    authMethod: "token" as const,
+  };
   
-  // Test strategy: Would require mocking invoke() and verifying call
-  expect(true).toBe(true); // Placeholder - full test requires component testing
+  const initialLength = profileStore.profiles.length;
+  profileActions.addProfile(profile);
+  
+  expect(profileStore.profiles.length).toBe(initialLength + 1);
+  expect(profileStore.profiles[profileStore.profiles.length - 1].name).toBe("New Profile");
 });
 
-test("AddProfileModal should display info text for OIDC profiles", () => {
-  // BDD: Given AddProfileModal with OIDC method selected
-  // When form is displayed
-  // Then info text "OIDC authentication will happen at login." should be visible
+test("profileActions.addProfile should update activeProfileId to new profile", () => {
+  profileStore.profiles.splice(0);
+  Object.keys(storage).forEach(k => delete storage[k]);
   
-  // This test will initially FAIL because info text isn't implemented yet
-  // Expected behavior: Show helpful text explaining deferred OIDC auth
+  const profile = {
+    name: "Active Profile",
+    url: "https://vault.example.io",
+    token: "token456",
+    authMethod: "token" as const,
+  };
   
-  // Test strategy: Would require React Testing Library to verify text content
-  expect(true).toBe(true); // Placeholder - full test requires DOM rendering
+  const result = profileActions.addProfile(profile);
+  
+  expect(profileStore.activeProfileId).toBe(result.id);
 });
 
-test("saveProfile function should accept VaultProfile object with authMethod", () => {
-  // BDD: Given a new profile with OIDC auth method
-  // When saveProfile is called
-  // Then profile should include authMethod, oidcMountPath, oidcRole fields
+test("profileActions.addProfile should correctly store all profile fields", () => {
+  profileStore.profiles.splice(0);
+  Object.keys(storage).forEach(k => delete storage[k]);
   
-  // This test will initially FAIL because saveProfile signature hasn't changed yet
-  // Current: saveProfile(name: string, url: string, token: string)
-  // Expected: saveProfile(profile: Omit<VaultProfile, 'id'>)
+  const profile = {
+    name: "Complete Profile",
+    url: "https://vault.complete.io",
+    token: "token789",
+    authMethod: "token" as const,
+  };
   
-  // Test strategy: This is an integration test - verify in component tests
-  expect(true).toBe(true); // Placeholder - verified through component integration
+  const result = profileActions.addProfile(profile);
+  
+  expect(result.name).toBe("Complete Profile");
+  expect(result.url).toBe("https://vault.complete.io");
+  expect(result.token).toBe("token789");
+  expect(result.authMethod).toBe("token");
+  expect(result.id).toBeDefined();
 });
 
 test("Dynamic field rendering should use AUTH_METHODS field definitions", () => {
