@@ -1,4 +1,6 @@
 import { proxy } from 'valtio'
+import { subscribeKey } from 'valtio/utils'
+import { profileStore } from './profile'
 
 export const authStore = proxy({
   isLoggedIn: false,
@@ -7,6 +9,9 @@ export const authStore = proxy({
   vaultUrl: '',
   error: '',
 })
+
+// Sync vaultUrl from active profile on initial load
+authStore.vaultUrl = profileStore.activeProfile?.url || ''
 
 export const authActions = {
   setToken: (token: string) => { authStore.token = token },
@@ -25,3 +30,8 @@ export const authActions = {
     authStore.isLoggedIn = false
   },
 }
+
+// Sync vaultUrl when active profile changes
+subscribeKey(profileStore, 'activeProfileId', () => {
+  authStore.vaultUrl = profileStore.activeProfile?.url || ''
+})
