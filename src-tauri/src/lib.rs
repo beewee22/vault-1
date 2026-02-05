@@ -6,6 +6,14 @@ use tokio::net::TcpListener;
 use url::Url;
 use tauri_plugin_shell::ShellExt;
 
+fn validate_vault_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("Vault URL is empty. Please configure a URL in your profile settings.".to_string());
+    }
+    Ok(trimmed.trim_end_matches('/').to_string())
+}
+
 #[tauri::command]
 async fn save_vault_token(token: String) -> Result<(), String> {
     let entry = Entry::new("vault-desktop", "default-token").map_err(|e| e.to_string())?;
@@ -21,6 +29,7 @@ async fn get_vault_token() -> Result<String, String> {
 
 #[tauri::command]
 async fn fetch_vault_secret(url: String, token: String, path: String, version: Option<u64>) -> Result<serde_json::Value, String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     let mut full_url = format!("{}/v1/{}", url, path);
     
@@ -43,6 +52,7 @@ async fn fetch_vault_secret(url: String, token: String, path: String, version: O
 
 #[tauri::command]
 async fn list_vault_secrets(url: String, token: String, path: String) -> Result<serde_json::Value, String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     let res = client
         .request(reqwest::Method::from_bytes(b"LIST").unwrap(), format!("{}/v1/{}", url, path))
@@ -59,6 +69,7 @@ async fn list_vault_secrets(url: String, token: String, path: String) -> Result<
 
 #[tauri::command]
 async fn save_vault_secret(url: String, token: String, path: String, data: serde_json::Value, cas: Option<u64>) -> Result<serde_json::Value, String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     
     let body = if let Some(cas_version) = cas {
@@ -88,6 +99,7 @@ async fn save_vault_secret(url: String, token: String, path: String, data: serde
 
 #[tauri::command]
 async fn delete_vault_secret(url: String, token: String, path: String, versions: Vec<u64>) -> Result<(), String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     
     let body = serde_json::json!({
@@ -109,6 +121,7 @@ async fn delete_vault_secret(url: String, token: String, path: String, versions:
 
 #[tauri::command]
 async fn destroy_vault_secret(url: String, token: String, path: String, versions: Vec<u64>) -> Result<(), String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     
     let body = serde_json::json!({
@@ -130,6 +143,7 @@ async fn destroy_vault_secret(url: String, token: String, path: String, versions
 
 #[tauri::command]
 async fn undelete_vault_secret(url: String, token: String, path: String, versions: Vec<u64>) -> Result<(), String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     
     let body = serde_json::json!({
@@ -151,6 +165,7 @@ async fn undelete_vault_secret(url: String, token: String, path: String, version
 
 #[tauri::command]
 async fn fetch_vault_metadata(url: String, token: String, path: String) -> Result<serde_json::Value, String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     let res = client
         .get(format!("{}/v1/{}", url, path))
@@ -167,6 +182,7 @@ async fn fetch_vault_metadata(url: String, token: String, path: String) -> Resul
 
 #[tauri::command]
 async fn list_vault_policies(url: String, token: String) -> Result<serde_json::Value, String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     let res = client
         .get(format!("{}/v1/sys/policy", url))
@@ -183,6 +199,7 @@ async fn list_vault_policies(url: String, token: String) -> Result<serde_json::V
 
 #[tauri::command]
 async fn read_vault_policy(url: String, token: String, name: String) -> Result<serde_json::Value, String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     let res = client
         .get(format!("{}/v1/sys/policy/{}", url, name))
@@ -242,7 +259,7 @@ async fn oidc_login(
     mount_path: String,
     role: String,
 ) -> Result<String, String> {
-    let url = url.trim_end_matches('/').to_string();
+    let url = validate_vault_url(&url)?;
     log::info!("Starting OIDC login for role: {} on mount: {}", role, mount_path);
     
     let nonce: String = rand::thread_rng()
@@ -371,6 +388,7 @@ async fn oidc_login(
 
 #[tauri::command]
 async fn check_vault_connection(url: String, token: String) -> Result<(), String> {
+    let url = validate_vault_url(&url)?;
     let client = reqwest::Client::new();
     let endpoint = format!("{}/v1/auth/token/lookup-self", url);
     
@@ -540,5 +558,25 @@ mod tests {
         
         assert_eq!(code, Some("cd_xyz789".to_string()));
         assert_eq!(state, Some("st_abc123".to_string()));
+    }
+
+    #[test]
+    fn test_validate_vault_url_empty() {
+        assert!(validate_vault_url("").is_err());
+    }
+
+    #[test]
+    fn test_validate_vault_url_whitespace() {
+        assert!(validate_vault_url("   ").is_err());
+    }
+
+    #[test]
+    fn test_validate_vault_url_valid() {
+        assert_eq!(validate_vault_url("https://vault.example.com").unwrap(), "https://vault.example.com");
+    }
+
+    #[test]
+    fn test_validate_vault_url_trailing_slash() {
+        assert_eq!(validate_vault_url("https://vault.example.com/").unwrap(), "https://vault.example.com");
     }
 }
