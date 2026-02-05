@@ -2,7 +2,7 @@ import { proxy, subscribe } from 'valtio'
 import { migrateProfiles, type VaultProfile } from '../types'
 
 const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('vault_profiles') : null
-const parsed = saved ? JSON.parse(saved) : [{ id: 'default', name: 'Default', url: 'https://vault.dev-mng-testbed.mng.musinsa.io', token: '' }]
+const parsed = saved ? JSON.parse(saved) : [{ id: 'default', name: 'Default', url: 'http://127.0.0.1:8200', token: '' }]
 const migrated = migrateProfiles(parsed)
 
 const savedActiveId = typeof localStorage !== 'undefined' ? localStorage.getItem('vault_active_profile') : null

@@ -5,7 +5,7 @@ import { AUTH_METHODS, type VaultProfile, type AuthMethod } from "../types";
 
 function AddProfileModal({ onClose, onSave }: { onClose: () => void, onSave: (profile: Omit<VaultProfile, "id">) => void }) {
     const [name, setName] = useState("");
-    const [url, setUrl] = useState("http://0.0.0.0:8200");
+    const [url, setUrl] = useState("http://127.0.0.1:8200");
     const [authMethod, setAuthMethod] = useState<AuthMethod>("token");
     const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
     const [isValidating, setIsValidating] = useState(false);
