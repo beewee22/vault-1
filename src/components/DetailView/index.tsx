@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import {
-    Key, ChevronRight, Star, Clock, Eye, EyeOff, Copy, Check, ExternalLink
+    Key, ChevronRight, Star, Clock, Eye, EyeOff, Copy, Check, ExternalLink, Pencil
 } from "lucide-react";
 import { toDataPath } from "../../utils/vault-path";
 import FieldsDisplay from "./FieldsDisplay";
+import FieldsEditor from "./FieldsEditor";
 
 interface DetailViewProps {
     secret: any;
@@ -23,6 +24,8 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
     const [fields, setFields] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentVersion, setCurrentVersion] = useState<number>(0);
 
     const handleCopy = async (key: string, value: any) => {
         const textToCopy = typeof value === 'string' ? value : JSON.stringify(value);
@@ -50,6 +53,10 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
             });
 
             const data = res.data?.data || {};
+            const metadata = res.data?.metadata || {};
+            const version = metadata.version || 0;
+            setCurrentVersion(version);
+
             const fieldItems = Object.keys(data).map(key => ({
                 key,
                 value: data[key],
@@ -67,11 +74,23 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
     useEffect(() => {
         fetchSecretData();
         onItemView?.(secret);
+        setIsEditing(false);
     }, [secret.path]);
 
     const toggleValue = (key: string) => {
         setShowValues(prev => ({ ...prev, [key]: !prev[key] }));
     };
+
+    const handleSaveEdit = async () => {
+        setIsEditing(false);
+        await fetchSecretData();
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+    };
+
+    const isKvV2 = mountType === "kv-v2";
 
     return (
         <div className="flex-1 flex flex-col bg-surface/10 h-full overflow-auto">
@@ -90,12 +109,24 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                     <div className="pt-1 md:pt-2 flex-1 min-w-0 w-full">
                         <div className="flex items-center justify-between gap-4">
                             <h1 className="text-2xl md:text-3xl font-bold text-main mb-2 truncate">{secret.name}</h1>
-                            <button
-                                onClick={() => onToggleFavorite(secret)}
-                                className={`p-2 rounded-xl transition-all duration-300 ${isFavorite ? 'bg-brand/20 text-brand' : 'bg-surface border border-main text-mute hover:text-main'}`}
-                            >
-                                <Star className="w-6 h-6" fill={isFavorite ? "currentColor" : "none"} strokeWidth={isFavorite ? 2 : 1.5} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {isKvV2 && !loading && (
+                                    <button
+                                        data-testid="edit-toggle"
+                                        onClick={() => setIsEditing(!isEditing)}
+                                        className={`p-2 rounded-xl transition-all duration-300 ${isEditing ? 'bg-brand/20 text-brand' : 'bg-surface border border-main text-mute hover:text-main'}`}
+                                        title={isEditing ? "Cancel editing" : "Edit secret"}
+                                    >
+                                        <Pencil className="w-6 h-6" strokeWidth={1.5} />
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => onToggleFavorite(secret)}
+                                    className={`p-2 rounded-xl transition-all duration-300 ${isFavorite ? 'bg-brand/20 text-brand' : 'bg-surface border border-main text-mute hover:text-main'}`}
+                                >
+                                    <Star className="w-6 h-6" fill={isFavorite ? "currentColor" : "none"} strokeWidth={isFavorite ? 2 : 1.5} />
+                                </button>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <code className="text-xs text-mute bg-black/10 px-2 py-1 rounded tracking-wider">{secret.path}</code>
@@ -110,14 +141,26 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                     </div>
                 ) : (
                     <div className="glass rounded-[32px] overflow-hidden border-white/5">
-                        <div className="p-2 space-y-1">
-                            <FieldsDisplay
-                                fields={fields}
-                                showValues={showValues}
-                                onToggleShow={toggleValue}
-                                onCopy={handleCopy}
-                                copiedKey={copiedKey}
-                            />
+                        <div className="p-6 space-y-1">
+                            {isEditing ? (
+                                <FieldsEditor
+                                    fields={fields}
+                                    currentVersion={currentVersion}
+                                    url={url}
+                                    token={token}
+                                    secretPath={secret.path}
+                                    onSave={handleSaveEdit}
+                                    onCancel={handleCancelEdit}
+                                />
+                            ) : (
+                                <FieldsDisplay
+                                    fields={fields}
+                                    showValues={showValues}
+                                    onToggleShow={toggleValue}
+                                    onCopy={handleCopy}
+                                    copiedKey={copiedKey}
+                                />
+                            )}
                         </div>
                     </div>
                 )}
