@@ -267,6 +267,7 @@ function Dashboard({ url, token, activeTab, setActiveTab, favorites, recentlyUse
                 isFavorite={isFav}
                 onToggleFavorite={toggleFavorite}
                 onItemView={onItemView}
+                mountType="kv-v2"
             />
         );
     }
