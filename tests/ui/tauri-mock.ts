@@ -56,12 +56,56 @@ export async function installTauriMock(page: Page, data: MockData = {}) {
         }
 
         const secretData = payload.secrets[args?.path] || {};
-        return { data: { data: secretData } };
+        return {
+          data: {
+            data: secretData,
+            metadata: {
+              version: 1,
+              created_time: "2026-02-05T06:00:00Z",
+              deletion_time: "",
+              destroyed: false
+            }
+          }
+        };
       }
 
       if (command === "list_vault_secrets") {
         const keys = payload.lists[args?.path] || [];
         return { data: { keys } };
+      }
+
+      if (command === "save_vault_secret") {
+        return {
+          data: {
+            version: 2,
+            created_time: "2026-02-05T06:00:00Z"
+          }
+        };
+      }
+
+      if (command === "delete_vault_secret") {
+        return undefined;
+      }
+
+      if (command === "destroy_vault_secret") {
+        return undefined;
+      }
+
+      if (command === "undelete_vault_secret") {
+        return undefined;
+      }
+
+      if (command === "fetch_vault_metadata") {
+        return {
+          data: {
+            versions: {
+              1: { created_time: "2026-02-01T10:00:00Z", deletion_time: "", destroyed: false },
+              2: { created_time: "2026-02-03T12:00:00Z", deletion_time: "2026-02-04T14:00:00Z", destroyed: false },
+              3: { created_time: "2026-02-05T06:00:00Z", deletion_time: "", destroyed: false }
+            },
+            current_version: 3
+          }
+        };
       }
 
       if (command === "list_vault_policies") {
