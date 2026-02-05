@@ -9,6 +9,7 @@ import FieldsDisplay from "./FieldsDisplay";
 import FieldsEditor from "./FieldsEditor";
 import DeleteActions from "./DeleteActions";
 import VersionHistory from "./VersionHistory";
+import VersionDiff from "./VersionDiff";
 
 interface DetailViewProps {
     secret: any;
@@ -172,6 +173,28 @@ function DetailView({ secret, onBack, url, token, isFavorite, onToggleFavorite, 
                     <div className="flex items-center justify-center py-20">
                         <div className="w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
                     </div>
+                ) : comparingVersions ? (
+                    <>
+                        <VersionDiff
+                            comparingVersions={comparingVersions}
+                            url={url}
+                            token={token}
+                            secret={secret}
+                            onClose={() => setComparingVersions(null)}
+                        />
+
+                        {!isEditing && (
+                            <VersionHistory
+                                secret={secret}
+                                mountType={mountType}
+                                currentVersion={currentVersion}
+                                url={url}
+                                token={token}
+                                onViewVersion={handleViewVersion}
+                                onCompare={handleCompare}
+                            />
+                        )}
+                    </>
                 ) : (
                     <>
                         <div className="glass rounded-[32px] overflow-hidden border-white/5">

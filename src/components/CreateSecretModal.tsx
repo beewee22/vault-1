@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Trash2, Plus } from "lucide-react";
+import { toastActions } from "../stores/toast";
 
 function CreateSecretModal({ onClose, onSave, currentPath }: { onClose: () => void, onSave: (name: string, data: any) => Promise<void>, currentPath: string }) {
     const [name, setName] = useState("");
@@ -25,7 +26,7 @@ function CreateSecretModal({ onClose, onSave, currentPath }: { onClose: () => vo
             await onSave(name, data);
             onClose();
         } catch (error: any) {
-            alert("Failed to save: " + error.toString());
+            toastActions.error("Failed to save: " + error.toString());
         } finally {
             setIsSaving(false);
         }
